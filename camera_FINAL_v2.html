@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scanner Kamera Pemilih</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+body{margin:0;background:#0f172a;color:white;font-family:Arial,sans-serif}.wrap{max-width:560px;margin:auto;padding:16px}.card{background:#1e293b;border-radius:18px;padding:16px}
+h1{font-size:20px;margin:0 0 6px}.sub{font-size:13px;color:#cbd5e1;margin-bottom:14px}#reader{background:#000;border-radius:14px;overflow:hidden}
+#status{margin-top:12px;padding:12px;border-radius:12px;background:#334155}#code{margin-top:10px;padding:14px;border-radius:12px;background:#0f172a;text-align:center;font-size:24px;font-weight:bold;word-break:break-all}
+button{width:100%;border:0;border-radius:12px;padding:13px;margin-top:10px;font-size:16px;font-weight:bold}.primary{background:#22c55e}.secondary{background:#475569;color:#fff}
+</style>
+</head>
+<body><div class="wrap"><div class="card">
+<h1>📷 Scanner Kamera</h1>
+<div class="sub">Pemilihan Ketua OSIS dan PK IPPNU SMA TBS Keramat Kudus</div>
+<div id="reader"></div><div id="status">Tekan “Mulai Kamera”.</div>
+<div id="code" style="display:none"></div>
+<button id="start" class="primary" onclick="startScanner()">📷 Mulai Kamera</button>
+<button id="stop" class="secondary" onclick="stopScanner()" style="display:none">⏹ Hentikan Kamera</button>
+<button id="send" class="primary" onclick="sendCode()" style="display:none">✅ Kirim ke Aplikasi</button>
+<button class="secondary" onclick="closeScanner()">↩️ Kembali ke Aplikasi</button>
+</div></div>
+<script>
+let scanner=null,running=false,lastCode='',lastAt=0;
+const statusEl=()=>document.getElementById('status');
+function status(t){statusEl().textContent=t}
+function success(text){
+ const now=Date.now(); if(!text || (text===lastCode&&now-lastAt<2500))return;
+ lastCode=text.trim(); lastAt=now;
+ document.getElementById('code').textContent=lastCode;
+ document.getElementById('code').style.display='block';
+ document.getElementById('send').style.display='block';
+ status('✅ Kode terbaca. Tekan “Kirim ke Aplikasi”.'); beep(); stopScanner();
+}
+async function startScanner(){
+ try{
+  scanner=new Html5Qrcode('reader');
+  const cfg={fps:10,qrbox:(w,h)=>{let s=Math.floor(Math.min(w,h)*.72);return{width:s,height:s}}};
+  try{await scanner.start({facingMode:{exact:'environment'}},cfg,success,()=>{})}
+  catch(e){
+   const cams=await Html5Qrcode.getCameras(); if(!cams.length)throw new Error('Kamera tidak ditemukan');
+   let cam=cams[cams.length-1]; const back=cams.find(c=>/back|rear|environment|belakang/i.test(c.label||'')); if(back)cam=back;
+   await scanner.start(cam.id,cfg,success,()=>{});
+  }
+  running=true;document.getElementById('start').style.display='none';document.getElementById('stop').style.display='block';
+  status('Kamera aktif. Arahkan ke QR/barcode kartu pemilih.');
+ }catch(e){running=false;status('❌ Kamera gagal aktif: '+(e.message||e))}
+}
+async function stopScanner(){
+ if(!scanner)return;try{if(running)await scanner.stop()}catch(e){}try{await scanner.clear()}catch(e){}
+ running=false;document.getElementById('start').style.display='block';document.getElementById('stop').style.display='none';
+}
+function sendCode(){
+ if(!lastCode){status('⚠️ Belum ada kode yang terbaca.');return;}
+ const payload={type:'VOTER_SCAN',source:'camera-scanner',code:lastCode,token:'SCAN_'+Date.now()+'_'+Math.random().toString(36).slice(2)};
+ let sent=false;
+ try{if(window.opener&&!window.opener.closed){window.opener.postMessage(payload,'*');sent=true;}}catch(e){}
+ try{localStorage.setItem('VOTER_SCAN_RESULT',JSON.stringify(payload));}catch(e){}
+ status(sent?'✅ Kode dikirim. Kembali ke tab aplikasi utama.':'✅ Kode disimpan. Kembali ke tab aplikasi utama.');
+}
+function closeScanner(){try{stopScanner()}catch(e){}try{if(window.opener&&!window.opener.closed){window.opener.focus();window.close();return;}}catch(e){}history.back()}
+function beep(){try{let C=window.AudioContext||window.webkitAudioContext,c=new C,o=c.createOscillator(),g=c.createGain();o.frequency.value=1200;g.gain.value=.08;o.connect(g);g.connect(c.destination);o.start();setTimeout(()=>{o.stop();c.close()},90)}catch(e){}}
+</script></body></html>
